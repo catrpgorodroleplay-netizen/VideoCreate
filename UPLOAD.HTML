@@ -17,8 +17,11 @@
 
     <div class="dashboard">
         <div class="section">
-            <h2>Загрузить видео</h2>
-            <form class="upload-form" onsubmit="handleUpload(event)">
+            <h2>📹 Загрузить видео</h2>
+            
+            <div id="uploadStatus"></div>
+            
+            <form class="upload-form" id="uploadForm" enctype="multipart/form-data">
                 <input type="text" id="videoTitle" placeholder="Название видео" required>
                 <textarea id="videoDescription" placeholder="Описание видео"></textarea>
                 
@@ -26,66 +29,135 @@
                     <div class="upload-icon">📁</div>
                     <p>Нажмите для выбора видео файла</p>
                     <span id="fileName">Файл не выбран</span>
+                    <p class="file-info">Поддерживаемые форматы: MP4, AVI, MOV, WebM (до 100MB)</p>
                 </div>
                 
-                <input type="file" id="videoFile" accept="video/*" style="display: none" onchange="showFileName()">
+                <input type="file" id="videoFile" accept="video/*" style="display: none" onchange="showFileName(this)">
                 
-                <button type="submit">Загрузить видео</button>
+                <button type="button" onclick="uploadVideo()" id="uploadBtn">🚀 Загрузить видео</button>
             </form>
+            
+            <div id="progressContainer" style="display: none; margin-top: 1rem;">
+                <div class="progress-bar">
+                    <div class="progress" id="uploadProgress"></div>
+                </div>
+                <div id="progressText">Загрузка: 0%</div>
+            </div>
         </div>
     </div>
 
     <script src="app.js"></script>
     <script>
         let selectedFile = null;
+        let userChannel = null;
 
-        function showFileName() {
-            const fileInput = document.getElementById('videoFile');
-            const fileName = document.getElementById('fileName');
-            
-            if (fileInput.files.length > 0) {
-                selectedFile = fileInput.files[0];
-                fileName.textContent = selectedFile.name;
-            }
-        }
-
-        async function handleUpload(e) {
-            e.preventDefault();
-            
-            const user = JSON.parse(localStorage.getItem('currentUser'));
-            const title = document.getElementById('videoTitle').value;
-            const description = document.getElementById('videoDescription').value;
-
-            if (!selectedFile) {
-                alert('Выберите видео файл');
-                return;
-            }
-
-            // В реальном приложении здесь была бы загрузка на сервер
-            // Для демо используем заглушку
-            const videoUrl = URL.createObjectURL(selectedFile);
-            
-            // Получаем channel_id пользователя
-            const channelResponse = await fetch(`/api/user/channel/${user.id}`);
-            const channel = await channelResponse.json();
-            
-            if (!channel) {
-                alert('Сначала создайте канал!');
-                return;
-            }
-
-            await uploadVideo(channel.id, title, description, videoUrl, null);
-            alert('Видео загружено!');
-            location.href = 'dashboard.html';
-        }
-
-        // Проверяем авторизацию
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Проверяем авторизацию
             const user = localStorage.getItem('currentUser');
             if (!user) {
                 location.href = 'auth.html';
+                return;
             }
+
+            // Загружаем информацию о канале пользователя
+            const userData = JSON.parse(user);
+            await loadUserChannel(userData.id);
         });
+
+        async function loadUserChannel(userId) {
+            try {
+                const response = await fetch(`/api/user/channel/${userId}`);
+                userChannel = await response.json();
+                
+                if (!userChannel) {
+                    showStatus('Сначала создайте канал!', 'error');
+                    document.getElementById('uploadBtn').disabled = true;
+                }
+            } catch (error) {
+                console.error('Error loading channel:', error);
+                showStatus('Ошибка загрузки канала', 'error');
+            }
+        }
+
+        function showFileName(input) {
+            const fileName = document.getElementById('fileName');
+            
+            if (input.files.length > 0) {
+                selectedFile = input.files[0];
+                fileName.textContent = selectedFile.name;
+                fileName.className = 'file-selected';
+                
+                // Проверяем размер файла
+                if (selectedFile.size > 100 * 1024 * 1024) {
+                    showStatus('Файл слишком большой (максимум 100MB)', 'error');
+                    document.getElementById('uploadBtn').disabled = true;
+                } else {
+                    showStatus('', '');
+                    document.getElementById('uploadBtn').disabled = false;
+                }
+            }
+        }
+
+        async function uploadVideo() {
+            if (!selectedFile) {
+                showStatus('Выберите видео файл', 'error');
+                return;
+            }
+
+            if (!userChannel) {
+                showStatus('Сначала создайте канал в личном кабинете', 'error');
+                return;
+            }
+
+            const title = document.getElementById('videoTitle').value;
+            const description = document.getElementById('videoDescription').value;
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+
+            if (!title.trim()) {
+                showStatus('Введите название видео', 'error');
+                return;
+            }
+
+            // Показываем прогресс
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('uploadBtn').disabled = true;
+
+            const formData = new FormData();
+            formData.append('video', selectedFile);
+            formData.append('channelId', userChannel.id);
+            formData.append('title', title);
+            formData.append('description', description);
+            formData.append('user', JSON.stringify(user));
+
+            try {
+                const response = await fetch('/api/upload-video', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showStatus('✅ Видео успешно загружено!', 'success');
+                    setTimeout(() => {
+                        location.href = 'dashboard.html';
+                    }, 2000);
+                } else {
+                    showStatus('Ошибка загрузки: ' + result.error, 'error');
+                    document.getElementById('uploadBtn').disabled = false;
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showStatus('Ошибка загрузки', 'error');
+                document.getElementById('uploadBtn').disabled = false;
+            }
+        }
+
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('uploadStatus');
+            statusEl.textContent = message;
+            statusEl.className = type;
+        }
     </script>
 </body>
 </html>
