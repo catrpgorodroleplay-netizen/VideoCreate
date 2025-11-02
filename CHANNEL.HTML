@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Канал - CREATE</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo" onclick="location.href='index.html'">CREATE</div>
+        <div class="user-menu">
+            <a href="index.html">Главная</a>
+            <a href="dashboard.html" id="dashboardLink">Кабинет</a>
+        </div>
+    </header>
+
+    <div class="channel-page">
+        <div class="channel-header">
+            <div class="channel-avatar" id="channelAvatar">👤</div>
+            <div class="channel-info">
+                <h1 id="channelName"></h1>
+                <p id="channelDescription"></p>
+                <div class="channel-stats">
+                    <span id="subscriberCount">0 подписчиков</span>
+                    <span id="videoCount">0 видео</span>
+                </div>
+                <button onclick="toggleSubscription()" id="subscribeBtn">Подписаться</button>
+            </div>
+        </div>
+
+        <div class="channel-videos">
+            <h2>Видео канала</h2>
+            <div class="videos-grid" id="channelVideos">
+                <!-- Видео канала -->
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        let currentChannelId = null;
+        let isSubscribed = false;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuth();
+            loadChannelData();
+        });
+
+        function loadChannelData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            currentChannelId = urlParams.get('id');
+            
+            if (!currentChannelId) {
+                alert('Канал не найден');
+                location.href = 'index.html';
+                return;
+            }
+
+            // Загрузка информации о канале
+            fetch(`/api/channels/${currentChannelId}`)
+                .then(response => response.json())
+                .then(channel => {
+                    document.getElementById('channelName').textContent = channel.name;
+                    document.getElementById('channelDescription').textContent = channel.description || 'Нет описания';
+                    document.getElementById('subscriberCount').textContent = channel.subscribers + ' подписчиков';
+                });
+
+            // Загрузка видео канала
+            fetch(`/api/channels/${currentChannelId}/videos`)
+                .then(response => response.json())
+                .then(videos => {
+                    document.getElementById('videoCount').textContent = videos.length + ' видео';
+                    displayChannelVideos(videos);
+                });
+
+            checkUserSubscription();
+        }
+
+        function displayChannelVideos(videos) {
+            const container = document.getElementById('channelVideos');
+            
+            if (videos.length === 0) {
+                container.innerHTML = '<p>На канале пока нет видео</p>';
+                return;
+            }
+
+            container.innerHTML = videos.map(video => `
+                <div class="video-card" onclick="location.href='watch.html?id=${video.id}'">
+                    <div class="video-thumbnail">🎬</div>
+                    <div class="video-info">
+                        <div class="video-title">${video.title}</div>
+                        <div class="video-stats">
+                            <span>👁️ ${video.views}</span>
+                            <span>❤️ ${video.likes}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function checkUserSubscription() {
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            if (!user) return;
+
+            const response = await fetch(`/api/check-subscription/${user.id}/${currentChannelId}`);
+            isSubscribed = await response.json();
+            
+            const btn = document.getElementById('subscribeBtn');
+            btn.textContent = isSubscribed ? 'Отписаться' : 'Подписаться';
+        }
+
+        async function toggleSubscription() {
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            if (!user) {
+                alert('Войдите чтобы подписаться');
+                return;
+            }
+
+            if (isSubscribed) {
+                await fetch('/api/unsubscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: user.id,
+                        channelId: currentChannelId
+                    })
+                });
+            } else {
+                await fetch('/api/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: user.id,
+                        channelId: currentChannelId
+                    })
+                });
+            }
+
+            location.reload();
+        }
+    </script>
+</body>
+</html>
