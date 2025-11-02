@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личный кабинет - CREATE</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo" onclick="location.href='index.html'">CREATE</div>
+        <div class="user-menu">
+            <span>Привет, <span id="userName"></span>!</span>
+            <a href="index.html">Главная</a>
+            <a href="#" onclick="logout()">Выйти</a>
+        </div>
+    </header>
+
+    <div class="dashboard">
+        <div class="section">
+            <h2>Мой канал</h2>
+            <div id="channelInfo">
+                <!-- Информация о канале -->
+            </div>
+            <button onclick="showCreateChannel()" id="createChannelBtn">Создать канал</button>
+            <button onclick="location.href='upload.html'">Загрузить видео</button>
+        </div>
+
+        <div class="section">
+            <h2>Мои видео</h2>
+            <div class="videos-grid" id="myVideos">
+                <!-- Мои видео -->
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Мессенджер CREATE</h2>
+            <div class="messages-container">
+                <div class="users-list">
+                    <h3>Пользователи</h3>
+                    <div id="usersList">
+                        <!-- Список пользователей -->
+                    </div>
+                </div>
+                <div class="chat-area">
+                    <div class="messages-list" id="messagesList">
+                        <!-- Сообщения -->
+                    </div>
+                    <div class="message-input">
+                        <input type="text" id="messageText" placeholder="Введите сообщение...">
+                        <button onclick="sendMessageToUser()">Отправить</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        let selectedUser = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuth();
+            loadUserData();
+            loadMyVideos();
+            loadUsers();
+        });
+
+        function loadUserData() {
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            document.getElementById('userName').textContent = user.username;
+            loadChannelInfo(user.id);
+        }
+
+        async function loadChannelInfo(userId) {
+            // Загрузка информации о канале пользователя
+            const response = await fetch(`/api/user/channel/${userId}`);
+            const channel = await response.json();
+            
+            if (channel) {
+                document.getElementById('channelInfo').innerHTML = `
+                    <h3>${channel.name}</h3>
+                    <p>${channel.description || 'Нет описания'}</p>
+                    <p>Подписчики: ${channel.subscribers}</p>
+                    <button onclick="editChannel(${channel.id})">Редактировать</button>
+                    <button onclick="deleteChannel(${channel.id})">Удалить канал</button>
+                `;
+                document.getElementById('createChannelBtn').style.display = 'none';
+            }
+        }
+
+        async function loadMyVideos() {
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            const response = await fetch(`/api/user/videos/${user.id}`);
+            const videos = await response.json();
+            displayMyVideos(videos);
+        }
+
+        function displayMyVideos(videos) {
+            const container = document.getElementById('myVideos');
+            if (videos.length === 0) {
+                container.innerHTML = '<p>У вас пока нет видео</p>';
+                return;
+            }
+
+            container.innerHTML = videos.map(video => `
+                <div class="video-card">
+                    <div class="video-thumbnail">🎬</div>
+                    <div class="video-info">
+                        <div class="video-title">${video.title}</div>
+                        <div class="video-stats">
+                            <span>👁️ ${video.views}</span>
+                            <span>❤️ ${video.likes}</span>
+                        </div>
+                        <button onclick="editVideo(${video.id})">Редактировать</button>
+                        <button onclick="deleteVideo(${video.id})">Удалить</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadUsers() {
+            const response = await fetch('/api/users');
+            const users = await response.json();
+            displayUsers(users);
+        }
+
+        function displayUsers(users) {
+            const container = document.getElementById('usersList');
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            
+            container.innerHTML = users
+                .filter(user => user.id !== currentUser.id)
+                .map(user => `
+                    <div class="user-item" onclick="selectUser(${user.id}, '${user.username}')">
+                        ${user.username}
+                    </div>
+                `).join('');
+        }
+
+        function selectUser(userId, username) {
+            selectedUser = userId;
+            document.querySelectorAll('.user-item').forEach(item => item.classList.remove('selected'));
+            event.target.classList.add('selected');
+            loadMessages(userId);
+        }
+
+        async function loadMessages(userId) {
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            const messages = await fetch(`/api/messages/${currentUser.id}/${userId}`);
+            const messagesData = await messages.json();
+            displayMessages(messagesData);
+        }
+
+        function displayMessages(messages) {
+            const container = document.getElementById('messagesList');
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            
+            container.innerHTML = messages.map(msg => `
+                <div class="message ${msg.from_user === currentUser.id ? 'own' : ''}">
+                    <strong>${msg.from_username}:</strong> ${msg.text}
+                    <div class="message-time">${new Date(msg.created_at).toLocaleTimeString()}</div>
+                </div>
+            `).join('');
+            
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendMessageToUser() {
+            if (!selectedUser) {
+                alert('Выберите пользователя');
+                return;
+            }
+
+            const text = document.getElementById('messageText').value;
+            if (!text.trim()) return;
+
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            await sendMessage(currentUser.id, selectedUser, text);
+            
+            document.getElementById('messageText').value = '';
+            loadMessages(selectedUser);
+        }
+
+        function showCreateChannel() {
+            const name = prompt('Введите название канала:');
+            const description = prompt('Введите описание канала:');
+            
+            if (name) {
+                const user = JSON.parse(localStorage.getItem('currentUser'));
+                createChannel(user.id, name, description);
+                location.reload();
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('currentUser');
+            location.href = 'index.html';
+        }
+
+        async function deleteVideo(videoId) {
+            if (confirm('Удалить это видео?')) {
+                await fetch(`/api/videos/${videoId}`, { method: 'DELETE' });
+                loadMyVideos();
+            }
+        }
+
+        async function deleteChannel(channelId) {
+            if (confirm('Удалить канал? Все видео будут удалены!')) {
+                await fetch(`/api/channels/${channelId}`, { method: 'DELETE' });
+                location.reload();
+            }
+        }
+    </script>
+</body>
+</html>
