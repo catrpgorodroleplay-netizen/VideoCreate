@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Просмотр видео - CREATE</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo" onclick="location.href='index.html'">CREATE</div>
+        <div class="user-menu">
+            <a href="index.html">Главная</a>
+            <a href="dashboard.html" id="dashboardLink">Кабинет</a>
+        </div>
+    </header>
+
+    <div class="watch-container">
+        <div class="video-player">
+            <video id="mainVideo" controls autoplay>
+                Ваш браузер не поддерживает видео
+            </video>
+        </div>
+
+        <div class="video-info">
+            <h1 id="videoTitle"></h1>
+            <div class="video-actions">
+                <button onclick="likeVideo()" id="likeBtn">❤️ <span id="likeCount">0</span></button>
+                <button onclick="subscribeToChannel()" id="subscribeBtn">Подписаться</button>
+                <span id="viewCount">0 просмотров</span>
+            </div>
+            <div class="channel-info">
+                <h3 id="channelName"></h3>
+                <p id="channelSubscribers"></p>
+            </div>
+            <p id="videoDescription"></p>
+        </div>
+
+        <div class="comments-section">
+            <h3>Комментарии</h3>
+            <div class="comment-form">
+                <textarea id="commentText" placeholder="Оставьте комментарий..."></textarea>
+                <button onclick="addComment()">Отправить</button>
+            </div>
+            <div id="commentsList">
+                <!-- Комментарии -->
+            </div>
+        </div>
+
+        <div class="recommendations-sidebar">
+            <h3>Рекомендуемые</h3>
+            <div id="sidebarVideos">
+                <!-- Рекомендации -->
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        let currentVideoId = null;
+        let currentChannelId = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuth();
+            loadVideoData();
+            loadRecommendationsSidebar();
+        });
+
+        function loadVideoData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            currentVideoId = urlParams.get('id');
+            
+            if (!currentVideoId) {
+                alert('Видео не найдено');
+                location.href = 'index.html';
+                return;
+            }
+
+            fetch(`/api/videos/${currentVideoId}`)
+                .then(response => response.json())
+                .then(video => {
+                    document.getElementById('videoTitle').textContent = video.title;
+                    document.getElementById('videoDescription').textContent = video.description;
+                    document.getElementById('viewCount').textContent = video.views + ' просмотров';
+                    document.getElementById('likeCount').textContent = video.likes;
+                    document.getElementById('channelName').textContent = video.channel_name;
+                    document.getElementById('channelSubscribers').textContent = video.subscribers + ' подписчиков';
+                    
+                    const videoElement = document.getElementById('mainVideo');
+                    videoElement.src = video.video_url;
+                    
+                    currentChannelId = video.channel_id;
+                    
+                    // Проверяем подписку
+                    checkSubscription();
+                });
+        }
+
+        async function likeVideo() {
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            if (!user) {
+                alert('Войдите чтобы оценить видео');
+                return;
+            }
+
+            await likeVideo(user.id, currentVideoId);
+            location.reload();
+        }
+
+        async function subscribeToChannel() {
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            if (!user) {
+                alert('Войдите чтобы подписаться');
+                return;
+            }
+
+            await subscribe(user.id, currentChannelId);
+            location.reload();
+        }
+
+        async function checkSubscription() {
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            if (!user) return;
+
+            const response = await fetch(`/api/check-subscription/${user.id}/${currentChannelId}`);
+            const isSubscribed = await response.json();
+            
+            const btn = document.getElementById('subscribeBtn');
+            btn.textContent = isSubscribed ? 'Отписаться' : 'Подписаться';
+        }
+
+        async function addComment() {
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            if (!user) {
+                alert('Войдите чтобы комментировать');
+                return;
+            }
+
+            const text = document.getElementById('commentText').value;
+            if (!text.trim()) return;
+
+            await fetch('/api/comments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    video_id: currentVideoId,
+                    user_id: user.id,
+                    text: text
+                })
+            });
+
+            document.getElementById('commentText').value = '';
+            loadComments();
+        }
+
+        async function loadComments() {
+            const response = await fetch(`/api/comments/${currentVideoId}`);
+            const comments = await response.json();
+            
+            const container = document.getElementById('commentsList');
+            container.innerHTML = comments.map(comment => `
+                <div class="comment">
+                    <strong>${comment.username}:</strong> ${comment.text}
+                </div>
+            `).join('');
+        }
+
+        function loadRecommendationsSidebar() {
+            fetch('/api/recommendations')
+                .then(response => response.json())
+                .then(videos => {
+                    const container = document.getElementById('sidebarVideos');
+                    container.innerHTML = videos.map(video => `
+                        <div class="sidebar-video" onclick="location.href='watch.html?id=${video.id}'">
+                            <div class="sidebar-thumbnail">🎬</div>
+                            <div class="sidebar-info">
+                                <div class="sidebar-title">${video.title}</div>
+                                <div class="sidebar-channel">${video.channel_name}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                });
+        }
+    </script>
+</body>
+</html>
