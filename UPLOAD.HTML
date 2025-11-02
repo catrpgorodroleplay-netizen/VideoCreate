@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Загрузка видео - CREATE</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo" onclick="location.href='index.html'">CREATE</div>
+        <div class="user-menu">
+            <a href="dashboard.html">Кабинет</a>
+            <a href="index.html">Главная</a>
+        </div>
+    </header>
+
+    <div class="dashboard">
+        <div class="section">
+            <h2>Загрузить видео</h2>
+            <form class="upload-form" onsubmit="handleUpload(event)">
+                <input type="text" id="videoTitle" placeholder="Название видео" required>
+                <textarea id="videoDescription" placeholder="Описание видео"></textarea>
+                
+                <div class="upload-area" onclick="document.getElementById('videoFile').click()">
+                    <div class="upload-icon">📁</div>
+                    <p>Нажмите для выбора видео файла</p>
+                    <span id="fileName">Файл не выбран</span>
+                </div>
+                
+                <input type="file" id="videoFile" accept="video/*" style="display: none" onchange="showFileName()">
+                
+                <button type="submit">Загрузить видео</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        let selectedFile = null;
+
+        function showFileName() {
+            const fileInput = document.getElementById('videoFile');
+            const fileName = document.getElementById('fileName');
+            
+            if (fileInput.files.length > 0) {
+                selectedFile = fileInput.files[0];
+                fileName.textContent = selectedFile.name;
+            }
+        }
+
+        async function handleUpload(e) {
+            e.preventDefault();
+            
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            const title = document.getElementById('videoTitle').value;
+            const description = document.getElementById('videoDescription').value;
+
+            if (!selectedFile) {
+                alert('Выберите видео файл');
+                return;
+            }
+
+            // В реальном приложении здесь была бы загрузка на сервер
+            // Для демо используем заглушку
+            const videoUrl = URL.createObjectURL(selectedFile);
+            
+            // Получаем channel_id пользователя
+            const channelResponse = await fetch(`/api/user/channel/${user.id}`);
+            const channel = await channelResponse.json();
+            
+            if (!channel) {
+                alert('Сначала создайте канал!');
+                return;
+            }
+
+            await uploadVideo(channel.id, title, description, videoUrl, null);
+            alert('Видео загружено!');
+            location.href = 'dashboard.html';
+        }
+
+        // Проверяем авторизацию
+        document.addEventListener('DOMContentLoaded', function() {
+            const user = localStorage.getItem('currentUser');
+            if (!user) {
+                location.href = 'auth.html';
+            }
+        });
+    </script>
+</body>
+</html>
