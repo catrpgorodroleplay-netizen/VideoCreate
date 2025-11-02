@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CREATE - Видеоплатформа</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">CREATE</div>
+        <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Поиск видео...">
+            <button onclick="searchVideos()">🔍</button>
+        </div>
+        <div class="user-menu">
+            <a href="auth.html" id="loginBtn">Войти</a>
+            <a href="dashboard.html" id="dashboardBtn" style="display:none">Кабинет</a>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <h1>Создавайте и делитесь видео</h1>
+            <p>Платформа для творческих людей</p>
+            <button onclick="location.href='auth.html'">Начать создавать</button>
+        </section>
+
+        <section class="recommendations">
+            <h2>Рекомендуемые видео</h2>
+            <div class="videos-grid" id="videosGrid">
+                <!-- Видео загружаются через JavaScript -->
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        // Загрузка рекомендаций при старте
+        loadRecommendations();
+        
+        // Проверка авторизации
+        checkAuth();
+    </script>
+</body>
+</html>
